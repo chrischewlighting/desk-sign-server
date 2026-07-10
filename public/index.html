@@ -1,4 +1,191 @@
-cd ~/desk-sign-server
-git add public/index.html
-git commit -m "add dashboard"
-git push
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Desk Sign Manager</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f8fafc; min-height: 100vh; padding: 20px 16px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .icon { background: #111; color: #fff; border-radius: 10px; padding: 8px 14px; font-size: 22px; }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header p { color: #6b7280; font-size: 12px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab { padding: 7px 18px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 14px; background: #e5e7eb; color: #374151; }
+  .tab.active { background: #111; color: #fff; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .full { grid-column: 1/-1; }
+  .card h2 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+  label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 10px; }
+  input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .status-btn { padding: 8px 10px; border-radius: 8px; border: 2px solid #e5e7eb; background: #fff; cursor: pointer; font-size: 13px; text-align: left; }
+  .status-btn.selected { border-color: #111; background: #f0f0f0; font-weight: 700; }
+  .actions { grid-column: 1/-1; display: flex; align-items: center; gap: 14px; }
+  .push-btn { background: #111; color: #fff; border: none; border-radius: 10px; padding: 12px 32px; font-weight: 700; font-size: 16px; cursor: pointer; }
+  .toast { font-weight: 600; font-size: 15px; }
+  .toast.ok { color: #059669; }
+  .toast.err { color: #dc2626; }
+  .toast.loading { color: #d97706; }
+  .preview-box { border: 3px solid #000; width: 300px; margin: 0 auto; font-family: monospace; }
+  .preview-header { background: #000; color: #fff; padding: 10px; text-align: center; }
+  .preview-header .name { font-weight: 700; font-size: 16px; }
+  .preview-header .title { font-size: 11px; color: #ccc; }
+  .preview-status { text-align: center; padding: 10px; border-bottom: 1px dashed #ccc; }
+  .preview-contacts { padding: 8px 12px; font-size: 11px; }
+  .preview-footer { background: #000; color: #fff; padding: 4px 8px; font-size: 9px; display: flex; justify-content: space-between; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="icon">🖥️</div>
+    <div>
+      <h1>Desk Sign Manager</h1>
+      <p>Waveshare ESP32-S3-RLCD-4.2 · Live updates</p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('edit')">✏️ Edit</button>
+    <button class="tab" onclick="showTab('preview')">👁️ Preview</button>
+  </div>
+
+  <div id="edit-tab">
+    <div class="grid">
+      <div class="card full">
+        <h2>👤 Identity</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label>Full Name</label><input id="name" placeholder="e.g. Alex Johnson"></div>
+          <div><label>Job Title</label><input id="title" placeholder="e.g. Senior Engineer"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📍 Status</h2>
+        <div class="status-grid" id="status-grid"></div>
+        <label>Back at (optional)</label>
+        <input id="backAt" placeholder="e.g. 2:30 PM">
+      </div>
+
+      <div class="card">
+        <h2>📬 Contact Info</h2>
+        <label>📞 Phone</label><input id="phone" placeholder="e.g. +65 9123 4567">
+        <label>✉️ Email</label><input id="email" placeholder="e.g. alex@company.com">
+        <label>💬 Slack / Teams</label><input id="slack" placeholder="e.g. @alex">
+        <label>Custom Note</label><input id="note" placeholder="e.g. For urgent matters, call my cell">
+      </div>
+
+      <div class="actions">
+        <button class="push-btn" onclick="pushToDisplay()">Push to Display →</button>
+        <span class="toast" id="toast"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="preview-tab" style="display:none">
+    <div class="card" style="text-align:center">
+      <h2 style="text-align:left;margin-bottom:16px">📺 Display Preview</h2>
+      <div class="preview-box">
+        <div class="preview-header">
+          <div class="name" id="p-name">Your Name</div>
+          <div class="title" id="p-title">Your Title</div>
+        </div>
+        <div class="preview-status">
+          <div style="font-weight:700;font-size:14px" id="p-status">🚶 Away from Desk</div>
+          <div style="font-size:11px;color:#555" id="p-backAt"></div>
+        </div>
+        <div class="preview-contacts" id="p-contacts"></div>
+        <div class="preview-footer">
+          <span id="p-time"></span>
+          <span>22°C 65% BAT85%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATUSES = [
+  { label: "Away from Desk", emoji: "🚶" },
+  { label: "In a Meeting", emoji: "📅" },
+  { label: "Out to Lunch", emoji: "🍽️" },
+  { label: "Working Remotely", emoji: "🏠" },
+  { label: "Out of Office", emoji: "✈️" },
+  { label: "Back Soon", emoji: "⏱️" },
+];
+
+let selectedStatus = STATUSES[0];
+
+const grid = document.getElementById("status-grid");
+STATUSES.forEach(s => {
+  const btn = document.createElement("button");
+  btn.className = "status-btn" + (s.label === selectedStatus.label ? " selected" : "");
+  btn.textContent = s.emoji + " " + s.label;
+  btn.onclick = () => {
+    selectedStatus = s;
+    document.querySelectorAll(".status-btn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+  };
+  grid.appendChild(btn);
+});
+
+function showTab(t) {
+  document.getElementById("edit-tab").style.display = t === "edit" ? "block" : "none";
+  document.getElementById("preview-tab").style.display = t === "preview" ? "block" : "none";
+  document.querySelectorAll(".tab").forEach((b, i) => b.classList.toggle("active", (i === 0) === (t === "edit")));
+  if (t === "preview") updatePreview();
+}
+
+function updatePreview() {
+  document.getElementById("p-name").textContent = document.getElementById("name").value || "Your Name";
+  document.getElementById("p-title").textContent = document.getElementById("title").value || "Your Title";
+  document.getElementById("p-status").textContent = selectedStatus.emoji + " " + selectedStatus.label;
+  const ba = document.getElementById("backAt").value;
+  document.getElementById("p-backAt").textContent = ba ? "Back at: " + ba : "";
+  const contacts = [];
+  if (document.getElementById("phone").value) contacts.push("📞 " + document.getElementById("phone").value);
+  if (document.getElementById("email").value) contacts.push("✉️ " + document.getElementById("email").value);
+  if (document.getElementById("slack").value) contacts.push("💬 " + document.getElementById("slack").value);
+  document.getElementById("p-contacts").innerHTML = contacts.join("<br>");
+  document.getElementById("p-time").textContent = new Date().toLocaleTimeString();
+}
+
+async function pushToDisplay() {
+  const toast = document.getElementById("toast");
+  toast.className = "toast loading";
+  toast.textContent = "⏳ Updating...";
+  try {
+    const res = await fetch("/api/screen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: document.getElementById("name").value,
+        title: document.getElementById("title").value,
+        status: selectedStatus.label,
+        backAt: document.getElementById("backAt").value,
+        phone: document.getElementById("phone").value,
+        email: document.getElementById("email").value,
+        slack: document.getElementById("slack").value,
+        note: document.getElementById("note").value,
+      })
+    });
+    if (res.ok) {
+      toast.className = "toast ok";
+      toast.textContent = "✅ Display updated!";
+    } else {
+      toast.className = "toast err";
+      toast.textContent = "❌ Server error";
+    }
+  } catch(e) {
+    toast.className = "toast err";
+    toast.textContent = "❌ Could not reach server";
+  }
+  setTimeout(() => toast.textContent = "", 3000);
+}
+</script>
+</body>
+</html>
